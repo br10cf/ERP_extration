@@ -1,0 +1,49 @@
+% 2022-11-27
+% @ BrunaCarvalho, UnB
+
+% This script was put together for exercise purposes, I personally recommend to do the filtering, ICA, IClabel and epoch extration at separable scripts and files, 
+just so that if anything goes wrong you can know were to go back and fix. Don't forget to check for data and events consistency as well!
+
+clc 
+clear all
+
+directory = ['(insert path for files to be processed)'];
+directory_destiny = ['(insert path for saving the processed files)'];
+
+folder = [{'(group1)'};{'(group1'}];
+
+for group = 1:4
+    
+temp_list = struct2cell(dir([directory filesep folder{group} filesep '*.set'])); % gather all ye .set.
+file_list = temp_list(1,:)';
+
+for file = 1:length(file_list)
+    
+    eeglab
+    
+    name = char(file_list{file}(1:end-4)) %just to check at the command line which file we are openning
+    
+    EEG = pop_loadbv(directory, file_list{file}, [], 1:(n. channels)); #check number of channels (we used 31, so it would be 1:31)
+    
+    EEG = pop_resample(EEG, 250); %resampling so that the process will be faster (freq = Hz)(recommended for EEG: 250Hz)
+    
+    EEG = pop_reref(EEG, [10, 21]); %re-referencing to TP9 and TP10
+    
+    % filter data and remove baseline. Applying high-pass filters causes a huge alteration in frequency spectrum, so we used the Clean Line 
+    fuction to get rid of the line-noise (in Brazil: 60Hz)
+    EEG = pop_eegfiltnew(EEG, 'locutoff',0.5) %low-pass filtering is recommended for filtering movement artifacts
+    EEG = pop_cleanline(EEG, 'bandwidth',2,'chanlist',[1:EEG.nbchan] ,'computepower',1,'linefreqs',60,'newversion',0,'normSpectrum',0,'p',0.01,'pad',2,'plotfigures',0,'scanforlines',0,'sigtype','Channels','taperbandwidth',2,'tau',100,'verb',1,'winsize',4,'winstep',1);
+    EEG = pop_rmbase( EEG, [],[]);
+    
+    % Run ICA
+    EEG = pop_clean_rawdata(EEG, 'FlatlineCriterion',5,'ChannelCriterion',0.8,'LineNoiseCriterion',4,'Highpass',[0.25 0.75] ,'BurstCriterion',20,'WindowCriterion',0.25,'BurstRejection','on','Distance','Euclidian','WindowCriterionTolerances',[-Inf 7] );
+    
+    % Run IClabel for automated detection of artifacts (heartbeat, muscle movements, eye-blinks, line-noise and non-brain signals)
+    EEG = pop_iclabel(EEG, 'default'); 
+    EEG = pop_icflag(EEG, [0.1 0.9;0.1 1;0.1 1;0.1 1;0.1 1;0.1 1;0.1 1]); %classify everything that would not be 90% certain that is brain, to be artifact
+    EEG = pop_subcomp( EEG, find(EEG.reject.gcompreject), 0); %remove artifacts components
+    
+    EEG = pop_saveset( EEG, 'filename',sprintf(strcat(name,'_','pre-processed')),'filepath',[directory_destiny filesep folder{group}]);
+    
+end
+end
